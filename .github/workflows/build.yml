@@ -1,0 +1,64 @@
+name: FFNET iOS Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Install ldid (for fakesigning)
+        run: brew install ldid
+
+      - name: Clone fishhook
+        run: |
+          git clone https://github.com/facebook/fishhook.git
+          cp fishhook/fishhook.c src/
+          cp fishhook/fishhook.h src/
+
+      - name: Build dylib
+        run: |
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          CC=$(xcrun --sdk iphoneos --find clang++)
+          $CC \
+            -arch arm64 \
+            -isysroot "$SDK" \
+            -std=c++17 \
+            -fobjc-arc \
+            -fvisibility=hidden \
+            -O2 \
+            -mios-version-min=15.0 \
+            -dynamiclib \
+            -framework Foundation \
+            -framework UIKit \
+            -framework QuartzCore \
+            -framework CoreGraphics \
+            -lobjc -lc++ \
+            src/main.mm \
+            src/bypass/Bypass.mm \
+            src/bypass/AntiDebug.mm \
+            src/features/Aimbot.mm \
+            src/features/ESP.mm \
+            src/ui/Menu.mm \
+            fishhook/fishhook.c \
+            -o FFNET.dylib
+
+      - name: Fakesign dylib
+        run: ldid -S FFNET.dylib
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FFNET-dylib
+          path: FFNET.dylib
